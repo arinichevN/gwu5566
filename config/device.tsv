@@ -1,0 +1,2 @@
+id	type	mode	sclk	mosi	miso	cs	spi_path	lcorrection_id
+1	max6675	sys	22	13	9	11	/dev/spidev0.0	1
