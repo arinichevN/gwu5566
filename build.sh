@@ -42,6 +42,9 @@ function move_conf {
 	cp ./config/thread.tsv $CONF_DIR_APP && \
 	cp ./config/thread_device.tsv $CONF_DIR_APP && \
 	cp ./config/lcorrection.tsv $CONF_DIR_APP && \
+	cp ./config/filter_ma.tsv $CONF_DIR_APP && \
+	cp ./config/filter_exp.tsv $CONF_DIR_APP && \
+	cp ./config/channel_filter.tsv $CONF_DIR_APP && \
 	chmod -R a+w $CONF_DIR_APP
 	echo "Your $APP configuration files are here: $CONF_DIR_APP";
 }
@@ -62,14 +65,18 @@ function build_lib {
 	gcc $1 -c $SOCK.c -D_REENTRANT $DEBUG_PARAM -pthread && \
 	gcc $1 -c util.c -D_REENTRANT $DEBUG_PARAM -pthread && \
 	gcc $1 -c tsv.c -D_REENTRANT $DEBUG_PARAM -pthread && \
-	gcc $1 -c lcorrection.c -D_REENTRANT $DEBUG_PARAM -pthread && \
 	gcc $1 -c spi.c -D_REENTRANT $DEBUG_PARAM -pthread && \
+	gcc $1 -c lcorrection.c -D_REENTRANT $DEBUG_PARAM -pthread && \
+	cd filter && \
+	gcc $1 -c ma.c -D_REENTRANT $DEBUG_PARAM -pthread && \
+	gcc $1 -c exp.c -D_REENTRANT $DEBUG_PARAM -pthread && \
+	cd ../ && \
 	cd acp && \
 	gcc $1 $CPU -c main.c -D_REENTRANT $DEBUG_PARAM -pthread && \
 	cd ../ && \
 	echo "library: making archive..." && \
 	rm -f libpac.a
-	ar -crv libpac.a app.o crc.o gpio.o timef.o $SOCK.o util.o tsv.o lcorrection.o spi.o acp/main.o && echo "library: done" && echo "hardware: $CPU $PINOUT"
+	ar -crv libpac.a app.o crc.o gpio.o timef.o $SOCK.o util.o tsv.o filter/ma.o filter/exp.o lcorrection.o spi.o acp/main.o && echo "library: done" && echo "hardware: $CPU $PINOUT"
 	rm -f *.o acp/*.o
 }
 function build {

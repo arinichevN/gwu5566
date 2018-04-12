@@ -9,6 +9,7 @@ int readSettings(int *sock_port, const char *data_path) {
     }
     char *str = TSVgetvalues(r, 0, "port");
     if (str == NULL) {
+        TSVclear(r);
         return 0;
     }
     *sock_port = atoi(str);
@@ -131,7 +132,6 @@ int initDevice(DeviceList *list, LCorrectionList *lcl, const char *data_path) {
         LIi.tconv = getConversionTime(LIi.type);
         ton_ts_touch(&LIi.tmrconv);
         LIi.sclk = TSVgetis(r, i, "sclk");
-        LIi.mosi = TSVgetis(r, i, "mosi");
         LIi.miso = TSVgetis(r, i, "miso");
         LIi.cs = TSVgetis(r, i, "cs");
         strcpyma(&LIi.spi.path, TSVgetvalues(r, i, "spi_path"));
@@ -152,6 +152,156 @@ int initDevice(DeviceList *list, LCorrectionList *lcl, const char *data_path) {
 #endif
         return 0;
     }
+    return 1;
+}
+
+static int countChannelMaExpLength(int *ma_length, int *exp_length, int channel_id, TSVresult* r_ma, TSVresult* r_exp, TSVresult* r_map, int n_map, int n_ma, int n_exp) {
+    *ma_length = *exp_length = 0;
+    for (int j = 0; j < n_map; j++) {
+        int fchannel_id = TSVgetis(r_map, j, "channel_id");
+        if (TSVnullreturned(r_map)) {
+            return 0;
+        }
+        if (channel_id == fchannel_id) {
+            (*ma_length)++;
+            (*exp_length)++;
+        }
+    }
+    return 1;
+}
+
+static int fillChannelFilter(FilterMAList *ma_list, FilterEXPList *exp_list, FilterList *f_list, int channel_id, TSVresult* r_ma, TSVresult* r_exp, TSVresult* r_map, int n_map, int n_ma, int n_exp) {
+    for (int j = 0; j < n_map; j++) {
+        int fchannel_id = TSVgetis(r_map, j, "channel_id");
+        if (TSVnullreturned(r_map)) {
+            return 0;
+        }
+        if (channel_id == fchannel_id) {
+            int filter_id = TSVgetis(r_map, j, "filter_id");
+            if (TSVnullreturned(r_map)) {
+                return 0;
+            }
+            for (int k = 0; k < n_ma; k++) {
+                int filter_p_id = TSVgetis(r_ma, k, "id");
+                int filter_p_length = TSVgetis(r_ma, k, "length");
+                if (TSVnullreturned(r_ma)) {
+                    return 0;
+                }
+                if (filter_p_id == filter_id) {
+                    if (ma_list->length >= ma_list->max_length) {
+#ifdef MODE_DEBUG
+                        fprintf(stderr, "%s(): ma_list overflow where channel_id=%d and filter_id=%d\n", F, channel_id, filter_id);
+#endif
+                        return 0;
+                    }
+                    if (!fma_init(&ma_list->item[ma_list->length], filter_p_id, filter_p_length)) {
+                        return 0;
+                    }
+                    ma_list->length++;
+                    if (f_list->length >= f_list->max_length) {
+#ifdef MODE_DEBUG
+                        fprintf(stderr, "%s(): f_list overflow where channel_id=%d and filter_id=%d\n", F, channel_id, filter_id);
+#endif
+                        return 0;
+                    }
+                    f_list->item[f_list->length].filter_ptr = &ma_list->item[ma_list->length-1];
+                    f_list->item[f_list->length].filter_fun = fma_calc;
+                    f_list->length++;
+                }
+            }
+            for (int k = 0; k < n_exp; k++) {
+                int filter_p_id = TSVgetis(r_exp, k, "id");
+                float filter_p_a = TSVgetfs(r_exp, k, "a");
+                if (TSVnullreturned(r_exp)) {
+                    return 0;
+                }
+                if (filter_p_id == filter_id) {
+                    if (exp_list->length >= exp_list->max_length) {
+#ifdef MODE_DEBUG
+                        fprintf(stderr, "%s(): exp_list overflow where channel_id=%d and filter_id=%d\n", F, channel_id, filter_id);
+#endif
+                        return 0;
+                    }
+                    if (!fexp_init(&exp_list->item[exp_list->length], filter_p_id, filter_p_a)) {
+                        return 0;
+                    }
+                    exp_list->length++;
+                    if (f_list->length >= f_list->max_length) {
+#ifdef MODE_DEBUG
+                        fprintf(stderr, "%s(): f_list overflow where channel_id=%d and filter_id=%d\n", F, channel_id, filter_id);
+#endif
+                        return 0;
+                    }
+                    f_list->item[f_list->length].filter_ptr = &exp_list->item[exp_list->length-1];
+                    f_list->item[f_list->length].filter_fun = fexp_calc;
+                    f_list->length++;
+                }
+            }
+        }
+    }
+    return 1;
+}
+
+int initDeviceFilter(DeviceList *list, const char *ma_path, const char *exp_path, const char *mapping_path) {
+#define CLEAR_TSV_LIB  TSVclear(r_map);TSVclear(r_exp);TSVclear(r_ma);
+#define RETURN_FAILURE  CLEAR_TSV_LIB return 0;
+    TSVresult tsv1 = TSVRESULT_INITIALIZER;
+    TSVresult* r_ma = &tsv1;
+    if (!TSVinit(r_ma, ma_path)) {
+        TSVclear(r_ma);
+        return 0;
+    }
+    TSVresult tsv2 = TSVRESULT_INITIALIZER;
+    TSVresult* r_exp = &tsv2;
+    if (!TSVinit(r_exp, exp_path)) {
+        TSVclear(r_exp);
+        TSVclear(r_ma);
+        return 0;
+    }
+    TSVresult tsv3 = TSVRESULT_INITIALIZER;
+    TSVresult* r_map = &tsv3;
+    if (!TSVinit(r_map, mapping_path)) {
+        RETURN_FAILURE;
+    }
+    int n_map = TSVntuples(r_map);
+    int n_ma = TSVntuples(r_ma);
+    int n_exp = TSVntuples(r_exp);
+    FORL{
+        int ma_length = 0;
+        int exp_length = 0;
+        if (!countChannelMaExpLength(&ma_length, &exp_length, LIi.id, r_ma, r_exp, r_map, n_map, n_ma, n_exp)) {
+            RETURN_FAILURE;
+        }
+        RESET_LIST(&LIi.fma_list);
+        RESIZE_M_LIST(&LIi.fma_list, ma_length);
+        if (LIi.fma_list.max_length != ma_length) {
+#ifdef MODE_DEBUG
+            fprintf(stderr, "%s(): failure while resizing fma_list where channel_id=%d\n", F, LIi.id);
+#endif
+            RETURN_FAILURE;
+        }
+        RESET_LIST(&LIi.fexp_list);
+        RESIZE_M_LIST(&LIi.fexp_list, exp_length);
+        if (LIi.fexp_list.max_length != exp_length) {
+#ifdef MODE_DEBUG
+            fprintf(stderr, "%s(): failure while resizing fexp_list where channel_id=%d\n", F, LIi.id);
+#endif
+            RETURN_FAILURE;
+        }
+        int f_length = exp_length + ma_length;
+        RESET_LIST(&LIi.f_list);
+        RESIZE_M_LIST(&LIi.f_list, f_length);
+        if (LIi.f_list.max_length != f_length) {
+#ifdef MODE_DEBUG
+            fprintf(stderr, "%s(): failure while resizing f_list where channel_id=%d\n", F, LIi.id);
+#endif
+            RETURN_FAILURE;
+        }
+        if (!fillChannelFilter(&LIi.fma_list, &LIi.fexp_list, &LIi.f_list, LIi.id, r_ma, r_exp, r_map, n_map, n_ma, n_exp)) {
+            RETURN_FAILURE;
+        }
+    }
+    CLEAR_TSV_LIB;
     return 1;
 }
 

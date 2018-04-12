@@ -20,10 +20,6 @@ int checkDevice(DeviceList *list) {
                 fprintf(stderr, "%s(): check device configuration file: bad sclk where id=%d\n", F, LIi.id);
                 valid = 0;
             }
-            if (!checkPin(LIi.mosi)) {
-                fprintf(stderr, "%s(): check device configuration file: bad mosi where id=%d\n", F, LIi.id);
-                valid = 0;
-            }
             if (!checkPin(LIi.miso)) {
                 fprintf(stderr, "%s(): check device configuration file: bad miso where id=%d\n", F, LIi.id);
                 valid = 0;
@@ -59,6 +55,9 @@ void freeDeviceList(DeviceList *list) {
     FORLi{
         free(LIi.spi.path);
         freeMutex(&LIi.mutex);
+        FREE_LIST(&LIi.f_list);
+        fma_freeList(&LIi.fma_list);
+        fexp_freeList(&LIi.fexp_list);
     }
     FREE_LIST(list);
 }
@@ -140,6 +139,9 @@ void printData(ACPResponse * response) {
 #define DLi device_list.item[i]
 #define TLi thread_list.item[i]
 #define DPLj device_plist.item[j]
+#define FMALj fma_list.item[j]
+#define FEXPLj fexp_list.item[j]
+#define FLj f_list.item[j]
 
     char q[LINE_SIZE];
     snprintf(q, sizeof q, "CONF_MAIN_FILE: %s\n", CONF_MAIN_FILE);
@@ -152,6 +154,12 @@ void printData(ACPResponse * response) {
     SEND_STR(q)
     snprintf(q, sizeof q, "CONF_LCORRECTION_FILE: %s\n", CONF_LCORRECTION_FILE);
     SEND_STR(q)
+    snprintf(q, sizeof q, "CONF_FILTER_MA_FILE: %s\n", CONF_FILTER_MA_FILE);
+    SEND_STR(q)
+    snprintf(q, sizeof q, "CONF_FILTER_EXP_FILE: %s\n", CONF_FILTER_EXP_FILE);
+    SEND_STR(q)
+    snprintf(q, sizeof q, "CONF_CHANNEL_FILTER_FILE: %s\n", CONF_CHANNEL_FILTER_FILE);
+    SEND_STR(q)
     snprintf(q, sizeof q, "port: %d\n", sock_port);
     SEND_STR(q)
     snprintf(q, sizeof q, "app_state: %s\n", getAppState(app_state));
@@ -161,21 +169,20 @@ void printData(ACPResponse * response) {
 
     acp_sendLCorrectionListInfo(&lcorrection_list, response, &peer_client);
 
-    SEND_STR("+-------------------------------------------------------------------------------+\n")
-    SEND_STR("|                                  device                                       |\n")
-    SEND_STR("+-----------+----+--------+----+----+----+---------+----------------+-----------+\n")
-    SEND_STR("|  pointer  | id |  type  |mode|sclk|mosi|miso| cs |     spi_path   | lcorr_ptr |\n")
-    SEND_STR("+-----------+----+--------+----+----+----+----+----+----------------+-----------+\n")
+    SEND_STR("+--------------------------------------------------------------------------+\n")
+    SEND_STR("|                               device                                     |\n")
+    SEND_STR("+-----------+----+--------+----+----+---------+----------------+-----------+\n")
+    SEND_STR("|  pointer  | id |  type  |mode|sclk|miso| cs |     spi_path   | lcorr_ptr |\n")
+    SEND_STR("+-----------+----+--------+----+----+----+----+----------------+-----------+\n")
     FORLISTN(device_list, i) {
         char *type = getEnumStr(DLi.type);
         char *mode = getEnumStr(DLi.mode);
-        snprintf(q, sizeof q, "|%11p|%4d|%8s|%4s|%4d|%4d|%4d|%4d|%16s|%11p|\n",
+        snprintf(q, sizeof q, "|%11p|%4d|%8s|%4s|%4d|%4d|%4d|%16s|%11p|\n",
                 (void *) &DLi,
                 DLi.id,
                 type,
                 mode,
                 DLi.sclk,
-                DLi.mosi,
                 DLi.miso,
                 DLi.cs,
                 DLi.spi.path,
@@ -184,7 +191,65 @@ void printData(ACPResponse * response) {
         SEND_STR(q)
     }
 
-    SEND_STR("+-----------+----+--------+----+----+----+----+----+----------------+-----------+\n")
+    SEND_STR("+-----------+----+--------+----+----+----+----+----------------+-----------+\n")
+
+    SEND_STR("+-----------------------------------------------+\n")
+    SEND_STR("|               channel ma filter               |\n")
+    SEND_STR("+-----------+-----------+-----------+-----------+\n")
+    SEND_STR("|channel_id | filter_id |filter_ptr |filter_leng|\n")
+    SEND_STR("+-----------+-----------+-----------+-----------+\n")
+    FORLISTN(device_list, i) {
+
+        FORLISTN(DLi.fma_list, j) {
+            snprintf(q, sizeof q, "|%11d|%11d|%11p|%11d|\n",
+                    DLi.id,
+                    DLi.FMALj.id,
+                    (void *) &DLi.FMALj,
+                    DLi.FMALj.length
+                    );
+            SEND_STR(q)
+        }
+    }
+
+    SEND_STR("+-----------+-----------+-----------+-----------+\n")
+
+    SEND_STR("+-----------------------------------------------+\n")
+    SEND_STR("|               channel exp filter              |\n")
+    SEND_STR("+-----------+-----------+-----------+-----------+\n")
+    SEND_STR("|channel_id | filter_id |filter_ptr | filter_a  |\n")
+    SEND_STR("+-----------+-----------+-----------+-----------+\n")
+    FORLISTN(device_list, i) {
+
+        FORLISTN(DLi.fexp_list, j) {
+            snprintf(q, sizeof q, "|%11d|%11d|%11p|%11.3f|\n",
+                    DLi.id,
+                    DLi.FEXPLj.id,
+                    (void *) &DLi.FEXPLj,
+                    DLi.FEXPLj.a
+                    );
+            SEND_STR(q)
+        }
+    }
+
+    SEND_STR("+-----------+-----------+-----------+-----------+\n")
+
+    SEND_STR("+-----------------------+\n")
+    SEND_STR("|    channel filter     |\n")
+    SEND_STR("+-----------+-----------+\n")
+    SEND_STR("|channel_id |filter_ptr |\n")
+    SEND_STR("+-----------+-----------+\n")
+    FORLISTN(device_list, i) {
+
+        FORLISTN(DLi.f_list, j) {
+            snprintf(q, sizeof q, "|%11d|%11p|\n",
+                    DLi.id,
+                    DLi.FLj.filter_ptr
+                    );
+            SEND_STR(q)
+        }
+    }
+    SEND_STR("+-----------+-----------+\n")
+
 
     SEND_STR("+----------------------------------------------------+\n")
     SEND_STR("|               device runtime                       |\n")
@@ -225,7 +290,9 @@ void printData(ACPResponse * response) {
 #undef TLi
 #undef DPLj
 #undef UPLj
-
+#undef FMALj
+#undef FEXPLj
+#undef FLj
 }
 
 void printHelp(ACPResponse * response) {

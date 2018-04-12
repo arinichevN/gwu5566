@@ -107,6 +107,11 @@ int initData() {
         FREE_LIST(&lcorrection_list);
         return 0;
     }
+    if(!initDeviceFilter(&device_list, CONF_FILTER_MA_FILE, CONF_FILTER_EXP_FILE, CONF_CHANNEL_FILTER_FILE)){
+		freeDeviceList(&device_list);
+        FREE_LIST(&lcorrection_list);
+        return 0;
+	}
     if (!checkDevice(&device_list)) {
         freeDeviceList(&device_list);
         FREE_LIST(&lcorrection_list);
@@ -132,6 +137,7 @@ void freeData() {
 void freeApp() {
     freeData();
     freeSocketFd(&sock_fd);
+    gpioFree();
 }
 
 void exit_nicely() {

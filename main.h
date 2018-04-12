@@ -1,6 +1,6 @@
 
-#ifndef GWU18PC_H
-#define GWU18PC_H
+#ifndef GWU5566_H
+#define GWU5566_H
 
 #include "lib/app.h"
 #include "lib/timef.h"
@@ -11,6 +11,8 @@
 #include "lib/gpio.h"
 #include "lib/lcorrection.h"
 #include "lib/spi.h"
+#include "lib/filter/ma.h"
+#include "lib/filter/exp.h"
 
 #define APP_NAME gwu5566
 #define APP_NAME_STR TOSTRING(APP_NAME)
@@ -26,6 +28,9 @@
 #define CONF_THREAD_FILE CONF_DIR "thread.tsv"
 #define CONF_THREAD_DEVICE_FILE CONF_DIR "thread_device.tsv"
 #define CONF_LCORRECTION_FILE CONF_DIR "lcorrection.tsv"
+#define CONF_FILTER_MA_FILE CONF_DIR "filter_ma.tsv"
+#define CONF_FILTER_EXP_FILE CONF_DIR "filter_exp.tsv"
+#define CONF_CHANNEL_FILTER_FILE CONF_DIR "channel_filter.tsv"
 
 #define TYPE_MAX6675_STR "max6675"
 #define TYPE_MAX31855_STR "max31855"
@@ -46,12 +51,18 @@ enum {
     MODE_GPIO
 } StateAPP;
 
+typedef struct{
+    void *filter_ptr;
+    void (*filter_fun)(float *, void *);
+} Filter; 
+
+DEC_LIST(Filter)
+
 struct device_st {
     int id;
     int mode;
     int type;
     int sclk;
-    int mosi;
     int miso;
     int cs;
     SPI spi;
@@ -61,6 +72,9 @@ struct device_st {
     int (*deviceSetup) (struct device_st*);
     FTS result;
     LCorrection *lcorrection;
+    FilterMAList fma_list;
+    FilterEXPList fexp_list;
+    FilterList f_list;
     Mutex mutex;
 };
 typedef struct device_st Device;

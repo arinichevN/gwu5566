@@ -6,18 +6,15 @@ static void printInt16(uint16_t d) {
         int v = (d >> i) & 1;
         printf("%d", v);
     }
-    puts("");
 }
 static void printInt32(uint32_t d) {
     for (int i = 31; i >= 0; i--) {
         int v = (d >> i) & 1;
         printf("%d", v);
     }
-    puts("");
 }
 
 int max6675gpio_setup(struct device_st * device) {
-    return 1;
     pinModeOut(device->cs);
     pinModeOut(device->sclk);
     pinModeIn(device->miso);
@@ -35,16 +32,13 @@ int max6675sys_setup(struct device_st * device) {
 }
 
 int max6675gpio_read(float *result, struct device_st * device) {
-    return 1;
     int sclk = device->sclk;
     int miso = device->miso;
     int cs = device->cs;
-    uint16_t v;
+    uint16_t v=0;
     pinLow(cs);
     delayUsBusy(1);
-    {
-        int i;
-        for (i = 15; i >= 0; i--) {
+        for (int i = 15; i >= 0; i--) {
             pinLow(sclk);
             delayUsBusy(1);
             if (pinRead(miso)) {
@@ -53,9 +47,9 @@ int max6675gpio_read(float *result, struct device_st * device) {
             pinHigh(sclk);
             delayUsBusy(1);
         }
-    }
     pinHigh(cs);
 #ifdef MODE_DEBUG
+printf("%d: ", device->id);
     printInt16(v);
 #endif
     if (v & 0x4) {
@@ -66,15 +60,26 @@ int max6675gpio_read(float *result, struct device_st * device) {
     }
     v >>= 3;
     *result = v * 0.25;
+#ifdef MODE_DEBUG
+	printf(" = %f\n", *result);
+#endif
+    for (int i = 0; i < device->f_list.length; i++) {
+        device->f_list.item[i].filter_fun(result, device->f_list.item[i].filter_ptr);
+    }
+    lcorrect(result, device->lcorrection);
     return 1;
 }
 
 int max6675sys_read(float *result, struct device_st * device) {
+	*result=0.0f;
+	for (int i = 0; i < device->f_list.length; i++) {
+        device->f_list.item[i].filter_fun(result, device->f_list.item[i].filter_ptr);
+    }
+    lcorrect(result, device->lcorrection);
     return 1;
 }
 
 int max31855gpio_setup(struct device_st * device) {
-    return 1;
     pinModeOut(device->cs);
     pinModeOut(device->sclk);
     pinModeIn(device->miso);
@@ -91,16 +96,14 @@ int max31855sys_setup(struct device_st * device) {
     return 1;
 }
 
-int max31855gpio_read(float *result, struct device_st * device) {return 1;
+int max31855gpio_read(float *result, struct device_st * device) {
     int sclk = device->sclk;
     int miso = device->miso;
     int cs = device->cs;
-    uint32_t v;
+    uint32_t v=0;
     pinLow(cs);
     delayUsBusy(1);
-    {
-        int i;
-        for (i = 31; i >= 0; i--) {
+        for (int i = 31; i >= 0; i--) {
             pinHigh(sclk);
             delayUsBusy(1);
             if (pinRead(miso)) {
@@ -109,9 +112,9 @@ int max31855gpio_read(float *result, struct device_st * device) {return 1;
             pinLow(sclk);
             delayUsBusy(1);
         }
-    }
     pinHigh(cs);
 #ifdef MODE_DEBUG
+printf("%d: ", device->id);
     printInt32(v);
 #endif
     int error = 0;
@@ -152,12 +155,31 @@ int max31855gpio_read(float *result, struct device_st * device) {return 1;
     if (error) {
         return 0;
     }
+    /*
     if (v & 0x80000000) {
         v = 0xFFFFC000 | ((v >> 18) & 0x00003FFFF);
     } else {
         v >>= 18;
     }
     *result = v * 0.25;
+    * */
+    float r;
+    if (v & 0x80000000) {//-
+       v=~v;
+       v=  (v >> 18);
+       r = (v *0.25+0.25)*-1;
+    } else {//+
+        v >>= 18;
+      r = v *0.25;
+    }
+    *result = r;
+#ifdef MODE_DEBUG
+	printf(" = %f\n", *result);
+#endif
+    for (int i = 0; i < device->f_list.length; i++) {
+        device->f_list.item[i].filter_fun(result, device->f_list.item[i].filter_ptr);
+    }
+    lcorrect(result, device->lcorrection);
     return 1;
 }
 
@@ -174,5 +196,9 @@ int max31855sys_read(float *result, struct device_st * device) {
         v = -v;
     }
     *result = ((((float) v * 25) + 0.5) / 10.0);
+    for (int i = 0; i < device->f_list.length; i++) {
+        device->f_list.item[i].filter_fun(result, device->f_list.item[i].filter_ptr);
+    }
+    lcorrect(result, device->lcorrection);
     return 1;
 }
