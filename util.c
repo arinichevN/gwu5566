@@ -123,7 +123,6 @@ void deviceRead(Device *item) {
             if (r) {
                 item->result.tm = getCurrentTime();
                 item->result.value = v;
-                lcorrect(&item->result.value, item->lcorrection);
             }
             item->result.state = r;
             unlockMutex(&item->mutex);
