@@ -7,12 +7,12 @@ int readSettings(int *sock_port, const char *data_path) {
         TSVclear(r);
         return 0;
     }
-    char *str = TSVgetvalues(r, 0, "port");
-    if (str == NULL) {
+    int _sock_port = TSVgetis ( r, 0, "port" );
+    if ( TSVnullreturned ( r ) ) {
         TSVclear(r);
         return 0;
     }
-    *sock_port = atoi(str);
+    *sock_port = _sock_port;
     TSVclear(r);
     return 1;
 }
@@ -35,7 +35,7 @@ static int getTypeByStr(char *s) {
     return UNKNOWN;
 }
 
-static int (*getReadFunctionForDevice(int type, int mode)) (float *, struct device_st *) {
+static int (*getReadFunctionForDevice(int type, int mode)) (double *, struct device_st *) {
     if (type == TYPE_MAX6675) {
         if (mode == MODE_SYS) {
             return max6675sys_read;
@@ -116,9 +116,7 @@ int initDevice(DeviceList *list, LCorrectionList *lcl, const char *data_path) {
     RESIZE_M_LIST(list, n);
     NULL_LIST(list);
     if (LML != n) {
-#ifdef MODE_DEBUG
-        fprintf(stderr, "%s(): failure while resizing list\n", F);
-#endif
+        putsde("failure while resizing list\n");
         TSVclear(r);
         return 0;
     }
@@ -136,7 +134,7 @@ int initDevice(DeviceList *list, LCorrectionList *lcl, const char *data_path) {
         LIi.cs = TSVgetis(r, i, "cs");
         strcpyma(&LIi.spi.path, TSVgetvalues(r, i, "spi_path"));
         int lcorrection_id = TSVgetis(r, i, "lcorrection_id");
-        LIi.lcorrection = getLCorrectionById(lcorrection_id, lcl);
+        LIST_GETBYID ( LIi.lcorrection, lcl, lcorrection_id);
         if (TSVnullreturned(r)) {
             break;
         }
@@ -147,9 +145,7 @@ int initDevice(DeviceList *list, LCorrectionList *lcl, const char *data_path) {
     }
     TSVclear(r);
     if (LL != LML) {
-#ifdef MODE_DEBUG
-        fprintf(stderr, "%s(): failure while reading rows\n", F);
-#endif
+        putsde("failure while reading rows\n");
         return 0;
     }
     return 1;
@@ -189,9 +185,7 @@ static int fillChannelFilter(FilterMAList *ma_list, FilterEXPList *exp_list, Fil
                 }
                 if (filter_p_id == filter_id) {
                     if (ma_list->length >= ma_list->max_length) {
-#ifdef MODE_DEBUG
-                        fprintf(stderr, "%s(): ma_list overflow where channel_id=%d and filter_id=%d\n", F, channel_id, filter_id);
-#endif
+                        printde("ma_list overflow where channel_id=%d and filter_id=%d\n", channel_id, filter_id);
                         return 0;
                     }
                     if (!fma_init(&ma_list->item[ma_list->length], filter_p_id, filter_p_length)) {
@@ -199,9 +193,7 @@ static int fillChannelFilter(FilterMAList *ma_list, FilterEXPList *exp_list, Fil
                     }
                     ma_list->length++;
                     if (f_list->length >= f_list->max_length) {
-#ifdef MODE_DEBUG
-                        fprintf(stderr, "%s(): f_list overflow where channel_id=%d and filter_id=%d\n", F, channel_id, filter_id);
-#endif
+                        printde("f_list overflow where channel_id=%d and filter_id=%d\n", channel_id, filter_id);
                         return 0;
                     }
                     f_list->item[f_list->length].filter_ptr = &ma_list->item[ma_list->length-1];
@@ -217,9 +209,7 @@ static int fillChannelFilter(FilterMAList *ma_list, FilterEXPList *exp_list, Fil
                 }
                 if (filter_p_id == filter_id) {
                     if (exp_list->length >= exp_list->max_length) {
-#ifdef MODE_DEBUG
-                        fprintf(stderr, "%s(): exp_list overflow where channel_id=%d and filter_id=%d\n", F, channel_id, filter_id);
-#endif
+                        printde("exp_list overflow where channel_id=%d and filter_id=%d\n", channel_id, filter_id);
                         return 0;
                     }
                     if (!fexp_init(&exp_list->item[exp_list->length], filter_p_id, filter_p_a)) {
@@ -227,9 +217,7 @@ static int fillChannelFilter(FilterMAList *ma_list, FilterEXPList *exp_list, Fil
                     }
                     exp_list->length++;
                     if (f_list->length >= f_list->max_length) {
-#ifdef MODE_DEBUG
-                        fprintf(stderr, "%s(): f_list overflow where channel_id=%d and filter_id=%d\n", F, channel_id, filter_id);
-#endif
+                        printde("f_list overflow where channel_id=%d and filter_id=%d\n", channel_id, filter_id);
                         return 0;
                     }
                     f_list->item[f_list->length].filter_ptr = &exp_list->item[exp_list->length-1];
@@ -275,26 +263,20 @@ int initDeviceFilter(DeviceList *list, const char *ma_path, const char *exp_path
         RESET_LIST(&LIi.fma_list);
         RESIZE_M_LIST(&LIi.fma_list, ma_length);
         if (LIi.fma_list.max_length != ma_length) {
-#ifdef MODE_DEBUG
-            fprintf(stderr, "%s(): failure while resizing fma_list where channel_id=%d\n", F, LIi.id);
-#endif
+            printde("failure while resizing fma_list where channel_id=%d\n", LIi.id);
             RETURN_FAILURE;
         }
         RESET_LIST(&LIi.fexp_list);
         RESIZE_M_LIST(&LIi.fexp_list, exp_length);
         if (LIi.fexp_list.max_length != exp_length) {
-#ifdef MODE_DEBUG
-            fprintf(stderr, "%s(): failure while resizing fexp_list where channel_id=%d\n", F, LIi.id);
-#endif
+            printde("failure while resizing fexp_list where channel_id=%d\n", LIi.id);
             RETURN_FAILURE;
         }
         int f_length = exp_length + ma_length;
         RESET_LIST(&LIi.f_list);
         RESIZE_M_LIST(&LIi.f_list, f_length);
         if (LIi.f_list.max_length != f_length) {
-#ifdef MODE_DEBUG
-            fprintf(stderr, "%s(): failure while resizing f_list where channel_id=%d\n", F, LIi.id);
-#endif
+            printde( "failure while resizing f_list where channel_id=%d\n", LIi.id);
             RETURN_FAILURE;
         }
         if (!fillChannelFilter(&LIi.fma_list, &LIi.fexp_list, &LIi.f_list, LIi.id, r_ma, r_exp, r_map, n_map, n_ma, n_exp)) {
@@ -380,19 +362,15 @@ int initThread(ThreadList *list, DeviceList *dl, const char *thread_path, const 
     int n = TSVntuples(r);
     if (n <= 0) {
         TSVclear(r);
-#ifdef MODE_DEBUG
-        fprintf(stderr, "%s(): no data rows in file\n", F);
-#endif
+        putsde("no data rows in file\n");
         return 0;
     }
     RESIZE_M_LIST(list, n);
     NULL_LIST(list);
-    printf("threads count: %d\n", n);
+    printdo("threads count: %d\n", n);
     NULL_LIST(list);
     if (LML != n) {
-#ifdef MODE_DEBUG
-        fprintf(stderr, "%s(): failure while resizing list\n", F);
-#endif
+        putsde("failure while resizing list\n");
         TSVclear(r);
         return 0;
     }
@@ -408,9 +386,7 @@ int initThread(ThreadList *list, DeviceList *dl, const char *thread_path, const 
     }
     TSVclear(r);
     if (LL != LML) {
-#ifdef MODE_DEBUG
-        fprintf(stderr, "%s(): failure while reading rows\n", F);
-#endif
+        putsde("failure while reading rows\n");
         return 0;
     }
     if (!TSVinit(r, thread_device_path)) {
@@ -419,9 +395,7 @@ int initThread(ThreadList *list, DeviceList *dl, const char *thread_path, const 
     }
     n = TSVntuples(r);
     if (n <= 0) {
-#ifdef MODE_DEBUG
-        fprintf(stderr, "%s(): no data rows in thread device file\n", F);
-#endif
+        putsde("no data rows in thread device file\n");
         TSVclear(r);
         return 0;
     }
@@ -440,9 +414,7 @@ int initThread(ThreadList *list, DeviceList *dl, const char *thread_path, const 
         RESIZE_M_LIST(&LIi.device_plist, thread_device_count);
         NULL_LIST(&LIi.device_plist);
         if (LIi.device_plist.max_length != thread_device_count) {
-#ifdef MODE_DEBUG
-            fprintf(stderr, "%s(): failure while resizing device_plist list\n", F);
-#endif
+            putsde("failure while resizing device_plist list\n");
             TSVclear(r);
             return 0;
         }
@@ -454,11 +426,10 @@ int initThread(ThreadList *list, DeviceList *dl, const char *thread_path, const 
                 break;
             }
             if (thread_id == LIi.id) {
-                Device *d = getDeviceById(device_id, dl);
+                Device *d;
+                LIST_GETBYID ( d, dl, device_id);
                 if (d == NULL) {
-#ifdef MODE_DEBUG
-                    fprintf(stderr, "%s(): device with id=%d not found\n", F, device_id);
-#endif
+                    printde("device with id=%d not found\n", device_id);
                     continue;
                 }
                 LIi.device_plist.item[LIi.device_plist.length] = d;
@@ -466,9 +437,7 @@ int initThread(ThreadList *list, DeviceList *dl, const char *thread_path, const 
             }
         }
         if (LIi.device_plist.max_length != LIi.device_plist.length) {
-#ifdef MODE_DEBUG
-            fprintf(stderr, "%s(): failure while assigning devices to threads: some devices not found\n", F);
-#endif
+            putsde("failure while assigning devices to threads: some devices not found\n");
             TSVclear(r);
             return 0;
         }

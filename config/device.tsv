@@ -1,3 +1,4 @@
 id	type	mode	sclk	miso	cs	spi_path	lcorrection_id
-1	max31855	gpio	22	13	11	/dev/spidev0.0	1
-2	max6675	gpio	37	35	33	/dev/spidev0.0	1
+1	max6675	gpio	13	11	15	/dev/spidev0.0	1
+2	max6675	gpio	36	40	38	/dev/spidev0.0	-1
+

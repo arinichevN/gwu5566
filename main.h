@@ -43,6 +43,8 @@
 #define CONVERSION_TIME_MAX6675  {0,230000000}
 #define CONVERSION_TIME_MAX31855 {0,110000000}
 
+#define DELAY_100NS delayTsBusy((struct timespec){0, 100})
+
 enum {
     UNKNOWN = 1,
     TYPE_MAX6675,
@@ -53,7 +55,7 @@ enum {
 
 typedef struct{
     void *filter_ptr;
-    void (*filter_fun)(float *, void *);
+    void (*filter_fun)(double *, void *);
 } Filter; 
 
 DEC_LIST(Filter)
@@ -68,7 +70,7 @@ struct device_st {
     SPI spi;
     struct timespec tconv;
     Ton_ts tmrconv;
-    int (*deviceRead) (float *, struct device_st*);
+    int (*deviceRead) (double *, struct device_st*);
     int (*deviceSetup) (struct device_st*);
     FTS result;
     LCorrection *lcorrection;
@@ -88,6 +90,7 @@ struct thread_st {
     pthread_t thread;
     struct timespec cycle_duration;
 };
+
 typedef struct thread_st Thread;
 DEC_LIST(Thread)
 
@@ -97,7 +100,7 @@ extern void serverRun(int *state, int init_state);
 
 extern void *threadFunction(void *arg);
 
-extern void initApp();
+extern int initApp();
 
 extern int initData();
 
@@ -107,7 +110,6 @@ extern void freeApp();
 
 extern void exit_nicely();
 
-extern void exit_nicely_e(char *s);
-
 #endif
+
 
